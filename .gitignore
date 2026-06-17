@@ -20,3 +20,6 @@ Thumbs.db
 
 # Exclude doc directory as requested
 doc/
+
+# Temporary files
+temp-secret.yaml

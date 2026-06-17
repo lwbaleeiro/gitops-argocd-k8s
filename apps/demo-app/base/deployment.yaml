@@ -25,6 +25,16 @@ spec:
                 configMapKeyRef:
                   name: demo-app-config
                   key: environment
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: demo-db-secret
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-db-secret
+                  key: db-password
 ---
 apiVersion: v1
 kind: ConfigMap
