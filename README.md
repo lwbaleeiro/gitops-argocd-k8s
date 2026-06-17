@@ -143,7 +143,7 @@ argocd app list
 
 To manage sensitive data securely inside Git, we use **Sealed Secrets**. The secret is encrypted locally using the public key of the cluster, producing a `SealedSecret` resource that is safe to commit. The controller in the cluster then decrypts it back into a standard `Secret`.
 
-### ⚡ Option A — Automated (Recommended)
+### Option A — Automated (Recommended)
 
 If you skipped Sealed Secrets during `bootstrap.sh`, or need to generate a new secret:
 
@@ -236,7 +236,7 @@ Since `selfHeal: true` is enabled in the configuration, ArgoCD will detect the m
 
 ## Cleanup
 
-### ⚡ Option A — Automated
+### Option A — Automated
 
 ```bash
 ./scripts/teardown.sh
@@ -244,7 +244,7 @@ Since `selfHeal: true` is enabled in the configuration, ArgoCD will detect the m
 
 The script stops the ArgoCD port-forward process (if managed by `bootstrap.sh`) and deletes the K3d cluster.
 
-### 🔧 Option B — Manual
+### Option B — Manual
 
 ```bash
 k3d cluster delete gitops-poc
