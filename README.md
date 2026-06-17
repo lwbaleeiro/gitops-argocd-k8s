@@ -12,6 +12,7 @@ Any changes pushed to this repository are automatically synchronized to the loca
 - **ArgoCD**: Senders controller and UI deployed in the `argocd` namespace.
 - **App-of-Apps Pattern**: A root application (`app-of-apps`) that manages and syncs all child applications (`demo-app-dev` and `demo-app-staging`).
 - **Multi-Environment**: Deployments to `dev` and `staging` namespaces using Kustomize overlays.
+- **Sealed Secrets**: Encrypts Kubernetes Secrets into custom `SealedSecret` resources that are safe to commit to Git, automatically decrypted inside the cluster by the controller.
 
 ---
 
@@ -22,6 +23,7 @@ Ensure you have the following installed on your machine:
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) (v1.28+)
 - [k3d](https://k3d.io/) (v5.6+)
 - [ArgoCD CLI](https://argoproj.github.io/argo-cd/cli_installation/)
+- [kubeseal CLI](https://github.com/bitnami-labs/sealed-secrets/releases) (v0.37.0+)
 
 ---
 
@@ -99,6 +101,51 @@ argocd app list
 
 ---
 
+## Secrets Management (Sealed Secrets)
+
+To manage sensitive data securely inside Git, we use **Sealed Secrets**. The secret is encrypted locally using the public key of the cluster, producing a `SealedSecret` resource which is safe to commit. The controller in the cluster then decrypts it back into a standard `Secret`.
+
+### 1. Install Sealed Secrets Controller
+Install the controller in the `kube-system` namespace:
+
+```bash
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.37.0/controller.yaml
+kubectl wait --for=condition=Ready pods -l name=sealed-secrets-controller -n kube-system --timeout=90s
+```
+
+### 2. Install kubeseal CLI Locally
+Download and install the `kubeseal` CLI to encrypt secrets:
+
+```bash
+# Download for Linux AMD64
+curl -L -o kubeseal.tar.gz https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.37.0/kubeseal-0.37.0-linux-amd64.tar.gz
+tar -xvzf kubeseal.tar.gz kubeseal
+sudo install -m 755 kubeseal /usr/local/bin/kubeseal
+rm kubeseal kubeseal.tar.gz
+```
+
+### 3. Generate and Seal a Secret
+Create a local raw secret (do not commit this file!) and seal it using the cluster's public key:
+
+```bash
+# Create standard secret locally
+kubectl create secret generic demo-db-secret \
+  --namespace dev \
+  --from-literal=db-user='admin-user' \
+  --from-literal=db-password='senha-secreta-banco' \
+  --dry-run=client -o yaml > temp-secret.yaml
+
+# Seal the secret
+kubeseal --format=yaml < temp-secret.yaml > apps/demo-app/overlays/dev/sealed-secret-db.yaml
+
+# Remove the temporary raw secret file immediately!
+rm temp-secret.yaml
+```
+
+Once committed and pushed, ArgoCD will synchronize the `SealedSecret` resource, and the controller will automatically decrypt it to create the matching `demo-db-secret` in the `dev` namespace.
+
+---
+
 ## Testing GitOps
 
 ### Scenario A: Automatic Sync (Git Push)
@@ -114,6 +161,9 @@ git push origin main
 ```
 ArgoCD will automatically sync the change in a few minutes. To force an immediate refresh:
 ```bash
+# Note: If your port-forward connection drops or your CLI session expires, run:
+# kubectl port-forward svc/argocd-server -n argocd 9090:443 &
+# and then re-login with 'argocd login localhost:9090 --username admin ...'
 argocd app get demo-app-dev --refresh
 ```
 
