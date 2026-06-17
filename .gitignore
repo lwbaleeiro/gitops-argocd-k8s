@@ -1,0 +1,22 @@
+# Logs
+*.log
+
+# OS temporary files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Kubernetes / Helm temporary files
+*.kube/
+.helm/
+
+# Exclude doc directory as requested
+doc/
