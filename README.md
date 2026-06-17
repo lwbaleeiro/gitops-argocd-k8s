@@ -29,7 +29,45 @@ Ensure you have the following installed on your machine:
 
 ## Getting Started
 
-### 1. Create the K3d Cluster
+### ⚡ Option A — Automated Setup (Recommended)
+
+Run the bootstrap script to set up everything in one shot: cluster creation, ArgoCD installation, login, App-of-Apps deployment, and optional Sealed Secrets controller installation.
+
+> **Prerequisites:** ensure `k3d`, `kubectl` and `argocd` CLI are installed before running.
+
+```bash
+./scripts/bootstrap.sh
+```
+
+The script is interactive — it will ask before deleting an existing cluster and before installing the Sealed Secrets controller. At the end, it prints the ArgoCD UI URL and the admin password.
+
+To tear down the entire environment later:
+
+```bash
+./scripts/teardown.sh
+```
+
+**Retrieve the temporary admin password:**
+
+**For Bash / Zsh:**
+```bash
+ARGOCD_PASS=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+echo "Password: $ARGOCD_PASS"
+```
+
+**For Fish:**
+```fish
+set ARGOCD_PASS (kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+echo "Password: $ARGOCD_PASS"
+```
+
+---
+
+### 🔧 Option B — Manual Setup
+
+> Follow these steps if you prefer full control over each phase.
+
+#### 1. Create the K3d Cluster
 Spin up a local cluster with the default Ingress Controller (Traefik) disabled:
 
 ```bash
@@ -40,7 +78,7 @@ k3d cluster create gitops-poc \
   --k3s-arg "--disable=traefik@server:0"
 ```
 
-### 2. Install ArgoCD
+#### 2. Install ArgoCD
 Create the namespace, apply the manifests, and wait for the pods to be ready:
 
 ```bash
@@ -51,10 +89,12 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 kubectl wait --for=condition=Ready pods --all -n argocd --timeout=120s
 ```
 
-### 3. Access the ArgoCD API/UI
+#### 3. Access the ArgoCD API/UI
 Expose the ArgoCD server API/UI on port `9090`:
 
 ```bash
+# IMPORTANT: Keep this running in the background or a separate terminal.
+# If the connection drops (broken pipe), re-run this command.
 kubectl port-forward svc/argocd-server -n argocd 9090:443 &
 ```
 
@@ -80,12 +120,10 @@ argocd login localhost:9090 --username admin --password $ARGOCD_PASS --insecure
 
 You can now also access the web UI at `https://localhost:9090` (User: `admin`).
 
----
-
-## Deploying via GitOps (App-of-Apps)
+#### 4. Deploy via GitOps (App-of-Apps)
 
 1. Fork this repository and clone it to your local machine.
-2. In infra/argocd-apps/app-of-apps.yaml, update the `repoURL` to point to your fork.
+2. In [infra/argocd-apps/app-of-apps.yaml](file:///home/lwbaleeiro/Documents/Code/gitops-argocd-k8s/infra/argocd-apps/app-of-apps.yaml), update the `repoURL` to point to your fork.
 3. Apply the root application:
 
 ```bash
@@ -103,9 +141,23 @@ argocd app list
 
 ## Secrets Management (Sealed Secrets)
 
-To manage sensitive data securely inside Git, we use **Sealed Secrets**. The secret is encrypted locally using the public key of the cluster, producing a `SealedSecret` resource which is safe to commit. The controller in the cluster then decrypts it back into a standard `Secret`.
+To manage sensitive data securely inside Git, we use **Sealed Secrets**. The secret is encrypted locally using the public key of the cluster, producing a `SealedSecret` resource that is safe to commit. The controller in the cluster then decrypts it back into a standard `Secret`.
 
-### 1. Install Sealed Secrets Controller
+### ⚡ Option A — Automated (Recommended)
+
+If you skipped Sealed Secrets during `bootstrap.sh`, or need to generate a new secret:
+
+```bash
+./scripts/setup-secrets.sh
+```
+
+The script validates dependencies, generates the raw secret (dry-run), seals it with `kubeseal`, saves the output to the correct overlay path, and deletes the plaintext file automatically.
+
+---
+
+### 🔧 Option B — Manual
+
+#### 1. Install Sealed Secrets Controller
 Install the controller in the `kube-system` namespace:
 
 ```bash
@@ -113,7 +165,7 @@ kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/downloa
 kubectl wait --for=condition=Ready pods -l name=sealed-secrets-controller -n kube-system --timeout=90s
 ```
 
-### 2. Install kubeseal CLI Locally
+#### 2. Install kubeseal CLI Locally
 Download and install the `kubeseal` CLI to encrypt secrets:
 
 ```bash
@@ -124,7 +176,7 @@ sudo install -m 755 kubeseal /usr/local/bin/kubeseal
 rm kubeseal kubeseal.tar.gz
 ```
 
-### 3. Generate and Seal a Secret
+#### 3. Generate and Seal a Secret
 Create a local raw secret (do not commit this file!) and seal it using the cluster's public key:
 
 ```bash
@@ -184,7 +236,15 @@ Since `selfHeal: true` is enabled in the configuration, ArgoCD will detect the m
 
 ## Cleanup
 
-To completely remove the local environment:
+### ⚡ Option A — Automated
+
+```bash
+./scripts/teardown.sh
+```
+
+The script stops the ArgoCD port-forward process (if managed by `bootstrap.sh`) and deletes the K3d cluster.
+
+### 🔧 Option B — Manual
 
 ```bash
 k3d cluster delete gitops-poc
