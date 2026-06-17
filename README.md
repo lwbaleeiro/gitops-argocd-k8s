@@ -29,7 +29,7 @@ Ensure you have the following installed on your machine:
 
 ## Getting Started
 
-### ⚡ Option A — Automated Setup (Recommended)
+### Option A — Automated Setup (Recommended)
 
 Run the bootstrap script to set up everything in one shot: cluster creation, ArgoCD installation, login, App-of-Apps deployment, and optional Sealed Secrets controller installation.
 
@@ -63,7 +63,7 @@ echo "Password: $ARGOCD_PASS"
 
 ---
 
-### 🔧 Option B — Manual Setup
+### Option B — Manual Setup
 
 > Follow these steps if you prefer full control over each phase.
 
@@ -155,7 +155,7 @@ The script validates dependencies, generates the raw secret (dry-run), seals it 
 
 ---
 
-### 🔧 Option B — Manual
+### Option B — Manual
 
 #### 1. Install Sealed Secrets Controller
 Install the controller in the `kube-system` namespace:
