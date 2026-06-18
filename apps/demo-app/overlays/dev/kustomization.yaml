@@ -11,3 +11,7 @@ configMapGenerator:
     behavior: merge
     literals:
       - environment=dev
+images:
+  - name: demo-app
+    newName: ghcr.io/lwbaleeiro/demo-app
+    newTag: latest

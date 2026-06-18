@@ -1,0 +1,74 @@
+name: CI — Build e Push de Imagem
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/demo-app
+
+jobs:
+  build-and-push:
+    name: Build, Push e Atualizar Manifesto
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GHCR_TOKEN }}
+
+      # ── 2. Define the image tag with the commit SHA ─────────────
+      - name: Define the image tag with the commit SHA
+        id: vars
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "image_tag=ghcr.io/${{ env.IMAGE_NAME }}:$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      # ── 3. Login to GHCR ───────────────────────────────────────────
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # ── 4. Build and push the image ──────────────────────────────────
+      - name: Build and push the Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./src
+          file: ./src/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+
+      # ── 5. Update the GitOps manifest with the new tag ─────────────
+      - name: Update kustomization.yaml with the new image tag
+        run: |
+          # Install kustomize
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+          # Update the image tag in the dev overlay
+          cd apps/demo-app/overlays/dev
+          kustomize edit set image demo-app=ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
+
+      # ── 6. Commit and push the updated manifest ───────────────────
+      - name: Commit and push the updated manifest
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add apps/demo-app/overlays/dev/kustomization.yaml
+          git commit -m "ci: update demo-app image to ${{ steps.vars.outputs.sha_short }} [skip ci]"
+          git push origin main
