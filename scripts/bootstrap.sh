@@ -41,7 +41,7 @@ confirm() {
 # ── Step 0: Pre-flight checks ─────────────────────────────────────────────────
 step "Pre-flight checks"
 
-for cmd in k3d kubectl argocd; do
+for cmd in k3d kubectl argocd helm; do
   if command -v "$cmd" &>/dev/null; then
     success "$cmd found: $(command -v "$cmd")"
   else
@@ -155,7 +155,26 @@ else
   warn "Run './scripts/setup-secrets.sh' or re-run bootstrap and choose 'y'."
 fi
 
-# ── Step 6: App-of-Apps ──────────────────────────────────────────────────────
+# ── Step 6: Nginx Ingress Controller ─────────────────────────────────────────
+step "Installing Nginx Ingress Controller"
+
+if helm status ingress-nginx -n ingress-nginx &>/dev/null; then
+  warn "Nginx Ingress Controller already installed. Skipping."
+else
+  log "Adding ingress-nginx Helm repository..."
+  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx &>/dev/null || true
+  helm repo update &>/dev/null
+
+  log "Installing ingress-nginx (LoadBalancer on port 80/443)..."
+  helm install ingress-nginx ingress-nginx/ingress-nginx \
+    --namespace ingress-nginx \
+    --create-namespace \
+    --set controller.service.type=LoadBalancer \
+    --wait --timeout=90s
+  success "Nginx Ingress Controller is ready."
+fi
+
+# ── Step 7: App-of-Apps ──────────────────────────────────────────────────────
 step "Deploying App-of-Apps"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -203,6 +222,10 @@ echo -e "  ${BOLD}ArgoCD UI:${NC}       https://localhost:${ARGOCD_PORT}"
 echo -e "  ${BOLD}Username:${NC}        admin"
 echo -e "  ${BOLD}Password:${NC}        ${ARGOCD_PASS}"
 echo ""
+echo -e "  ${BOLD}App URLs:${NC}"
+echo -e "    dev:     http://localhost:8080/dev"
+echo -e "    staging: http://localhost:8080/staging"
+echo ""
 echo -e "  ${YELLOW}Note:${NC} Port-forward is running in the background (PID: ${PORT_FORWARD_PID})."
 echo -e "        To stop it: kill \$(cat /tmp/argocd-portforward.pid)"
 
@@ -218,7 +241,8 @@ if [[ "${INSTALL_SEALED_SECRETS}" == true ]]; then
   echo ""
   echo -e "     ${BLUE}./scripts/setup-secrets.sh${NC}"
   echo -e "     ${BLUE}git add apps/demo-app/overlays/dev/sealed-secret-db.yaml${NC}"
-  echo -e "     ${BLUE}git commit -m \"fix: re-seal secret for new cluster\"${NC}"
+  echo -e "     ${BLUE}git add apps/demo-app/overlays/staging/sealed-secret-db.yaml${NC}"
+  echo -e "     ${BLUE}git commit -m \"fix: re-seal secrets for new cluster\"${NC}"
   echo -e "     ${BLUE}git push origin main${NC}"
 fi
 
@@ -237,10 +261,11 @@ if [[ -n "${OUTOFSYNC_APPS}" ]]; then
     elif echo "${APP_STATUS}" | grep -q "no key could decrypt"; then
       echo -e "     ${RED}•${NC} ${BOLD}${app}${NC} — SealedSecret cannot be decrypted (cluster key changed)."
       echo -e "       ${YELLOW}→${NC} Re-seal the secret and push:"
-      echo -e "          ./scripts/setup-secrets.sh"
-      echo -e "          git add apps/demo-app/overlays/dev/sealed-secret-db.yaml"
-      echo -e "          git commit -m \"fix: re-seal secret for new cluster\""
-      echo -e "          git push origin main"
+      echo -e \"          ./scripts/setup-secrets.sh\"
+      echo -e \"          git add apps/demo-app/overlays/dev/sealed-secret-db.yaml\"
+      echo -e \"          git add apps/demo-app/overlays/staging/sealed-secret-db.yaml\"
+      echo -e \"          git commit -m \\\"fix: re-seal secrets for new cluster\\\"\"
+      echo -e \"          git push origin main\"
     else
       echo -e "     ${RED}•${NC} ${BOLD}${app}${NC} — check the ArgoCD UI for details:"
       echo -e "          https://localhost:${ARGOCD_PORT}/applications/${app}"
