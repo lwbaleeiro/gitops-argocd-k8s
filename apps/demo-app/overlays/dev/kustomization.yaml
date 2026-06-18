@@ -4,6 +4,7 @@ namespace: dev
 resources:
 - ../../base
 - sealed-secret-db.yaml
+- ingress.yaml
 patches:
 - path: patch-replicas.yaml
 configMapGenerator:
