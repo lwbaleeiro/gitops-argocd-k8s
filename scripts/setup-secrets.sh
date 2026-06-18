@@ -2,12 +2,15 @@
 # =============================================================================
 # setup-secrets.sh
 #
-# Handles the Sealed Secrets workflow: generates a raw Kubernetes Secret
-# locally (dry-run), seals it using kubeseal, places the encrypted manifest
-# in the correct overlay path, and removes the plaintext file immediately.
+# Handles the Sealed Secrets workflow for ALL environments: generates a raw
+# Kubernetes Secret locally (dry-run), seals it with kubeseal for each
+# namespace, places the encrypted manifests in the correct overlay paths,
+# and removes the plaintext file immediately.
+#
+# Environments sealed: dev, staging
 #
 # Run this after bootstrap.sh if you skipped the Sealed Secrets step, or
-# whenever you need to generate/rotate a new SealedSecret.
+# whenever you recreate the cluster (new key = must re-seal all secrets).
 #
 # Usage: ./scripts/setup-secrets.sh
 # =============================================================================
@@ -25,8 +28,6 @@ NC='\033[0m'
 # ── Config ────────────────────────────────────────────────────────────────────
 SEALED_SECRETS_VERSION="v0.37.0"
 SECRET_NAME="demo-db-secret"
-SECRET_NS="dev"
-OUTPUT_PATH="apps/demo-app/overlays/dev/sealed-secret-db.yaml"
 TEMP_FILE="temp-secret.yaml"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,50 +71,72 @@ if ! kubectl get deployment sealed-secrets-controller -n kube-system &>/dev/null
 fi
 success "Sealed Secrets controller is running."
 
-# ── Step 1: Generate raw Secret (dry-run, never committed) ───────────────────
-step "Generating temporary raw Secret"
+# ── Step 1: Fetch cluster public key once ─────────────────────────────────────
+step "Fetching cluster public key"
 
-log "Creating '${SECRET_NAME}' in namespace '${SECRET_NS}' (dry-run)..."
-log "  NOTE: Edit this script to change db-user and db-password values."
+CERT_FILE="/tmp/sealed-secrets-pub-cert.pem"
+log "Fetching public certificate from controller..."
+kubeseal --fetch-cert \
+  --controller-name=sealed-secrets-controller \
+  --controller-namespace=kube-system \
+  > "${CERT_FILE}"
+success "Certificate saved to ${CERT_FILE}."
 
-kubectl create secret generic "${SECRET_NAME}" \
-  --namespace "${SECRET_NS}" \
-  --from-literal=db-user='admin-user' \
-  --from-literal=db-password='senha-secreta-banco' \
-  --dry-run=client -o yaml > "${REPO_ROOT}/${TEMP_FILE}"
+# ── Step 2: Seal for each namespace ───────────────────────────────────────────
+# Array of "namespace:output_path" pairs — add more entries to support new envs
+declare -a ENVIRONMENTS=(
+  "dev:apps/demo-app/overlays/dev/sealed-secret-db.yaml"
+  "staging:apps/demo-app/overlays/staging/sealed-secret-db.yaml"
+)
 
-success "Temporary file created at ${TEMP_FILE} (will be deleted after sealing)."
+SEALED_FILES=()
 
-# ── Step 2: Seal the Secret ───────────────────────────────────────────────────
-step "Sealing the Secret"
+for entry in "${ENVIRONMENTS[@]}"; do
+  NS="${entry%%:*}"
+  OUTPUT_PATH="${entry##*:}"
 
-mkdir -p "$(dirname "${REPO_ROOT}/${OUTPUT_PATH}")"
+  step "Sealing '${SECRET_NAME}' for namespace '${NS}'"
 
-log "Encrypting with kubeseal → ${OUTPUT_PATH}..."
-kubeseal --format=yaml \
-  < "${REPO_ROOT}/${TEMP_FILE}" \
-  > "${REPO_ROOT}/${OUTPUT_PATH}"
+  log "Creating raw secret (dry-run, namespace: ${NS})..."
+  log "  NOTE: Edit this script to change db-user and db-password values."
 
-success "SealedSecret generated at ${OUTPUT_PATH}."
+  kubectl create secret generic "${SECRET_NAME}" \
+    --namespace "${NS}" \
+    --from-literal=db-user='admin-user' \
+    --from-literal=db-password='senha-secreta-banco' \
+    --dry-run=client -o yaml > "${REPO_ROOT}/${TEMP_FILE}"
 
-# ── Step 3: Remove plaintext file ────────────────────────────────────────────
-step "Cleanup"
+  mkdir -p "$(dirname "${REPO_ROOT}/${OUTPUT_PATH}")"
 
-rm -f "${REPO_ROOT}/${TEMP_FILE}"
-success "Temporary raw secret file removed."
+  log "Encrypting with kubeseal → ${OUTPUT_PATH}..."
+  kubeseal --format=yaml \
+    --cert "${CERT_FILE}" \
+    < "${REPO_ROOT}/${TEMP_FILE}" \
+    > "${REPO_ROOT}/${OUTPUT_PATH}"
+
+  rm -f "${REPO_ROOT}/${TEMP_FILE}"
+  success "SealedSecret generated: ${OUTPUT_PATH}"
+  SEALED_FILES+=("${OUTPUT_PATH}")
+done
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}${BOLD}║      Sealed Secret created successfully!     ║${NC}"
+echo -e "${GREEN}${BOLD}║    Sealed Secrets created successfully!      ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${BOLD}File created:${NC} ${OUTPUT_PATH}"
+echo -e "  ${BOLD}Files created:${NC}"
+for f in "${SEALED_FILES[@]}"; do
+  echo -e "    ${GREEN}✔${NC} ${f}"
+done
 echo ""
-echo -e "  ${BOLD}Next steps:${NC}"
-echo -e "    1. Review the generated file: cat ${OUTPUT_PATH}"
-echo -e "    2. Commit and push to trigger ArgoCD sync:"
-echo -e "       ${BLUE}git add ${OUTPUT_PATH}${NC}"
-echo -e "       ${BLUE}git commit -m \"feat: add sealed secret for demo-db\"${NC}"
-echo -e "       ${BLUE}git push origin main${NC}"
+echo -e "  ${BOLD}Next steps — commit and push to trigger ArgoCD sync:${NC}"
+echo ""
+echo -e "    ${BLUE}git add \\"
+for f in "${SEALED_FILES[@]}"; do
+  echo -e "      ${f} \\"
+done
+echo -e "    ${NC}"
+echo -e "    ${BLUE}git commit -m \"fix: re-seal secrets for new cluster\"${NC}"
+echo -e "    ${BLUE}git push origin main${NC}"
 echo ""
