@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: staging
 resources:
   - ../../base
+  - sealed-secret-db.yaml
 patches:
   - path: patch-replicas.yaml
 configMapGenerator:
