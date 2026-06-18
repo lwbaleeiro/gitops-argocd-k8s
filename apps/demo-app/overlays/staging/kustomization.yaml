@@ -10,3 +10,8 @@ configMapGenerator:
     behavior: merge
     literals:
       - environment=staging
+# Image promoted manually from dev (CI only auto-updates dev overlay)
+images:
+  - name: demo-app
+    newName: ghcr.io/lwbaleeiro/demo-app
+    newTag: cb88ddb
