@@ -14,4 +14,4 @@ configMapGenerator:
 images:
 - name: demo-app
   newName: ghcr.io/lwbaleeiro/demo-app
-  newTag: 500b7ef
+  newTag: cb88ddb
