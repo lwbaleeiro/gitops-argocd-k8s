@@ -394,3 +394,68 @@ The GitHub Actions workflow (`.github/workflows/ci.yaml`) runs on every push to 
 # Manual
 k3d cluster delete gitops-poc
 ```
+
+
+---
+
+## Mensageria & Persistência (RabbitMQ + PostgreSQL + Worker)
+
+Esta evolução adiciona processamento assíncrono e banco relacional gerenciados via GitOps:
+
+```
+[ Frontend / Script CLI ] 
+          │
+          ▼ (HTTP POST / Direct AMQP)
+    [ RabbitMQ ] (Fila 'cargas')
+          │
+          ▼ (Consumer ACK)
+  [ Worker Consumer ]
+          │
+          ▼ (SQL INSERT)
+   [ PostgreSQL ] (Tabela 'cargas_processadas')
+          │
+          ▼ (Query REST API)
+  [ Frontend Web UI ] (Atualização em tempo real)
+```
+
+### Como Testar
+
+#### 1. Interface Web (Recomendado)
+Acesse a aplicação no navegador:
+- **Dev**: [http://localhost:8080/dev](http://localhost:8080/dev)
+- **Staging**: [http://localhost:8080/staging](http://localhost:8080/staging)
+
+No dashboard:
+- Verifique os indicadores de status (**API 🟢**, **RabbitMQ 🟢**, **PostgreSQL 🟢**).
+- Configure a quantidade de itens e tamanho desejado no painel **Gerador de Carga**.
+- Clique em **Enviar Carga para RabbitMQ**.
+- Observe a tabela atualizando em tempo real com os dados consumidos pelo Worker e salvos no PostgreSQL!
+
+#### 2. Disparar Cargas via Linha de Comando (CLI)
+
+Dentro do pod no cluster:
+```bash
+kubectl exec -it deployment/demo-app-worker -n dev -- python producer.py --items 100 --size 64 --count 3
+```
+
+Ou executando localmente via script Python:
+```bash
+# Encaminhe a porta do RabbitMQ temporariamente:
+kubectl port-forward svc/rabbitmq 5672:5672 -n dev
+
+# Execute o script gerador:
+python scripts/generate_payload.py --items 50 --size 128 --count 5 --interval 0.5
+```
+
+#### 3. Inspecionar RabbitMQ e PostgreSQL
+
+**RabbitMQ Management UI:**
+```bash
+kubectl port-forward svc/rabbitmq 15672:15672 -n dev
+# Acesse http://localhost:15672 (usuário: admin / senha: admin123)
+```
+
+**Consultar Banco PostgreSQL:**
+```bash
+kubectl exec -it postgres-0 -n dev -- psql -U admin-user -d demo -c 'SELECT id, payload_id, item_count, payload_size_bytes, source, created_at FROM cargas_processadas;'
+```

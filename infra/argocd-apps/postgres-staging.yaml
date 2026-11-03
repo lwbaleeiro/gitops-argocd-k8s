@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgres-staging
+  namespace: argocd
+  labels:
+    environment: staging
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/lwbaleeiro/gitops-argocd-k8s
+    targetRevision: HEAD
+    path: apps/postgres/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

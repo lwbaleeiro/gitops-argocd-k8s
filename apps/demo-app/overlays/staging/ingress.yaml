@@ -4,14 +4,14 @@ metadata:
   name: demo-app
   namespace: staging
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /staging
-            pathType: Prefix
+          - path: /staging(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: demo-app

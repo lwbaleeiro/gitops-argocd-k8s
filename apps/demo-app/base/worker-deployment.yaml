@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app-worker
+  labels:
+    app: demo-app-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app-worker
+  template:
+    metadata:
+      labels:
+        app: demo-app-worker
+    spec:
+      containers:
+        - name: demo-app-worker
+          image: demo-app
+          command: ["python", "worker.py"]
+          env:
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: demo-app-config
+                  key: environment
+            - name: DB_HOST
+              value: "postgres"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "demo"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: demo-db-secret
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demo-db-secret
+                  key: db-password
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              value: "admin"
+            - name: RABBITMQ_PASSWORD
+              value: "admin123"
+            - name: RABBITMQ_QUEUE
+              value: "cargas"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
