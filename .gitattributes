@@ -1,0 +1,7 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Explicitly ensure shell scripts always have LF
+*.sh text eol=lf
+*.bash text eol=lf
+
