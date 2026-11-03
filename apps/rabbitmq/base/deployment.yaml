@@ -22,11 +22,9 @@ spec:
               name: amqp
             - containerPort: 15672
               name: management
-          env:
-            - name: RABBITMQ_DEFAULT_USER
-              value: "admin"
-            - name: RABBITMQ_DEFAULT_PASS
-              value: "admin123"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/rabbitmq
           resources:
             requests:
               memory: "128Mi"
@@ -34,4 +32,7 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
-
+      volumes:
+        - name: config
+          configMap:
+            name: rabbitmq-definitions

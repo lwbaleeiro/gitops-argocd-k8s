@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'src/**'
+      - '.github/workflows/ci.yaml'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -23,8 +25,6 @@ jobs:
       # ── 1. Checkout ────────────────────────────────────────────────
       - name: Checkout do repositório
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GHCR_TOKEN }}
 
       # ── 2. Define the image tag with the commit SHA ─────────────
       - name: Define the image tag with the commit SHA
@@ -39,7 +39,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # ── 4. Build and push the image ──────────────────────────────────
       - name: Build and push the Docker image

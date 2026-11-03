@@ -17,7 +17,7 @@ spec:
       containers:
         - name: demo-app-worker
           image: demo-app
-          command: ["python", "worker.py"]
+          command: ["python3", "worker.py"]
           env:
             - name: ENVIRONMENT
               valueFrom:

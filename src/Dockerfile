@@ -16,4 +16,7 @@ COPY . .
 
 EXPOSE 80
 
+# Link python → python3 para compatibilidade com command: ["python", ...]
+RUN ln -s /usr/local/bin/python3 /usr/local/bin/python || true
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]

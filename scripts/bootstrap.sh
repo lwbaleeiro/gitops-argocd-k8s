@@ -212,22 +212,58 @@ done
 
 argocd app list
 
+# ── Step 8: RabbitMQ port-forward ────────────────────────────────────────────
+step "Setting up RabbitMQ Management port-forward"
+
+RABBITMQ_MGMT_PORT=15672
+RABBITMQ_PF_PID_FILE="/tmp/rabbitmq-portforward.pid"
+
+# Kill any stale port-forward on RabbitMQ management port
+if lsof -ti tcp:"${RABBITMQ_MGMT_PORT}" &>/dev/null; then
+  warn "Port ${RABBITMQ_MGMT_PORT} already in use. Killing existing process..."
+  lsof -ti tcp:"${RABBITMQ_MGMT_PORT}" | xargs kill -9
+  sleep 1
+fi
+
+# Wait for rabbitmq pod to exist in dev namespace
+log "Waiting for RabbitMQ pod to be Ready in namespace 'dev' (up to 120s)..."
+if kubectl wait --for=condition=Ready pods -l app=rabbitmq -n dev --timeout=120s 2>/dev/null; then
+  log "Starting RabbitMQ Management port-forward on localhost:${RABBITMQ_MGMT_PORT}..."
+  kubectl port-forward svc/rabbitmq -n dev "${RABBITMQ_MGMT_PORT}":15672 \
+    > /tmp/rabbitmq-portforward.log 2>&1 &
+  RABBITMQ_PF_PID=$!
+  echo "$RABBITMQ_PF_PID" > "${RABBITMQ_PF_PID_FILE}"
+  sleep 2
+  if kill -0 "$RABBITMQ_PF_PID" 2>/dev/null; then
+    success "RabbitMQ Management UI available at http://localhost:${RABBITMQ_MGMT_PORT} (admin/admin123)"
+  else
+    warn "RabbitMQ port-forward failed to start. Run manually:"
+    warn "  kubectl port-forward svc/rabbitmq -n dev 15672:15672"
+  fi
+else
+  warn "RabbitMQ pod not Ready in time. Run manually after the pod starts:"
+  warn "  kubectl port-forward svc/rabbitmq -n dev 15672:15672"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}${BOLD}║         Bootstrap completed successfully!    ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${BOLD}ArgoCD UI:${NC}       https://localhost:${ARGOCD_PORT}"
-echo -e "  ${BOLD}Username:${NC}        admin"
-echo -e "  ${BOLD}Password:${NC}        ${ARGOCD_PASS}"
+echo -e "  ${BOLD}ArgoCD UI:${NC}              https://localhost:${ARGOCD_PORT}"
+echo -e "  ${BOLD}Username:${NC}               admin"
+echo -e "  ${BOLD}Password:${NC}               ${ARGOCD_PASS}"
 echo ""
 echo -e "  ${BOLD}App URLs:${NC}"
 echo -e "    dev:     http://localhost:8080/dev"
 echo -e "    staging: http://localhost:8080/staging"
 echo ""
-echo -e "  ${YELLOW}Note:${NC} Port-forward is running in the background (PID: ${PORT_FORWARD_PID})."
-echo -e "        To stop it: kill \$(cat /tmp/argocd-portforward.pid)"
+echo -e "  ${BOLD}RabbitMQ Management UI:${NC} http://localhost:15672 (admin / admin123)"
+echo ""
+echo -e "  ${YELLOW}Note:${NC} Port-forwards running in the background:"
+echo -e "    ArgoCD:   PID $(cat /tmp/argocd-portforward.pid 2>/dev/null || echo 'unknown')"
+echo -e "    RabbitMQ: PID $(cat ${RABBITMQ_PF_PID_FILE} 2>/dev/null || echo 'unknown')"
 
 # Warn if Sealed Secrets was installed on a brand-new cluster
 # The private key changes on every new cluster, so existing SealedSecrets in
@@ -261,11 +297,11 @@ if [[ -n "${OUTOFSYNC_APPS}" ]]; then
     elif echo "${APP_STATUS}" | grep -q "no key could decrypt"; then
       echo -e "     ${RED}•${NC} ${BOLD}${app}${NC} — SealedSecret cannot be decrypted (cluster key changed)."
       echo -e "       ${YELLOW}→${NC} Re-seal the secret and push:"
-      echo -e \"          ./scripts/setup-secrets.sh\"
-      echo -e \"          git add apps/demo-app/overlays/dev/sealed-secret-db.yaml\"
-      echo -e \"          git add apps/demo-app/overlays/staging/sealed-secret-db.yaml\"
-      echo -e \"          git commit -m \\\"fix: re-seal secrets for new cluster\\\"\"
-      echo -e \"          git push origin main\"
+      echo -e "          ./scripts/setup-secrets.sh"
+      echo -e "          git add apps/demo-app/overlays/dev/sealed-secret-db.yaml"
+      echo -e "          git add apps/demo-app/overlays/staging/sealed-secret-db.yaml"
+      echo -e "          git commit -m \"fix: re-seal secrets for new cluster\""
+      echo -e "          git push origin main"
     else
       echo -e "     ${RED}•${NC} ${BOLD}${app}${NC} — check the ArgoCD UI for details:"
       echo -e "          https://localhost:${ARGOCD_PORT}/applications/${app}"
