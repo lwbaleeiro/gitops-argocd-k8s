@@ -22,7 +22,7 @@ jobs:
       packages: write
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────────
+      # ── 1. Checkout (usa GITHUB_TOKEN padrão para garantir que o clone funcione) ──
       - name: Checkout do repositório
         uses: actions/checkout@v4
 
@@ -33,15 +33,19 @@ jobs:
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "image_tag=ghcr.io/${{ env.IMAGE_NAME }}:$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      # ── 3. Login to GHCR ───────────────────────────────────────────
+      # ── 3. Set up Docker Buildx ─────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── 4. Login to GHCR ───────────────────────────────────────────
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
-      # ── 4. Build and push the image ──────────────────────────────────
+      # ── 5. Build and push the image ──────────────────────────────────
       - name: Build and push the Docker image
         uses: docker/build-push-action@v5
         with:
@@ -52,7 +56,7 @@ jobs:
             ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
             ghcr.io/${{ env.IMAGE_NAME }}:latest
 
-      # ── 5. Update the GitOps manifest with the new tag ─────────────
+      # ── 6. Update the GitOps manifest with the new tag ─────────────
       - name: Update kustomization.yaml with the new image tag
         run: |
           # Install kustomize
@@ -63,7 +67,7 @@ jobs:
           cd apps/demo-app/overlays/dev
           kustomize edit set image demo-app=ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
 
-      # ── 6. Commit and push the updated manifest ───────────────────
+      # ── 7. Commit and push the updated manifest ───────────────────
       - name: Commit and push the updated manifest
         run: |
           git config user.name  "github-actions[bot]"

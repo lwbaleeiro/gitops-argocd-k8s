@@ -22,9 +22,20 @@ spec:
               name: amqp
             - containerPort: 15672
               name: management
-          volumeMounts:
-            - name: config
-              mountPath: /etc/rabbitmq
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: "admin"
+            - name: RABBITMQ_DEFAULT_PASS
+              value: "admin123"
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    until rabbitmqctl status >/dev/null 2>&1; do sleep 1; done
+                    rabbitmqadmin -u admin -p admin123 declare queue name=cargas durable=true || true
           resources:
             requests:
               memory: "128Mi"
@@ -32,7 +43,3 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
-      volumes:
-        - name: config
-          configMap:
-            name: rabbitmq-definitions
